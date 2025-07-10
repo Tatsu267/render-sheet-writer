@@ -12,10 +12,10 @@ CORS(app)
 # RenderのSecret Fileから認証情報を読み込む
 # SERVICE_ACCOUNT_FILE_PATH = '/etc/secrets/service_account.json'
 # ローカルテスト用に、同じフォルダにあるファイルを読み込む
-SERVICE_ACCOUNT_FILE_PATH = 'service_account.json'
+SERVICE_ACCOUNT_FILE_PATH = 'alien-isotope-455823-n4-6db6b2ed6b17.json'
 
-SPREADSHEET_ID = 'ここにあなたのスプレッドシートIDを貼り付け'
-SHEET_NAME = 'シート1' # 書き込みたいシート名
+SPREADSHEET_ID = '1wP2JQNj2iWTxq68XBzkg_Mb7uZtCC9_6f73G89Ds4Qw'
+SHEET_NAME = 'チェック待ちcsv' # 書き込みたいシート名
 SCOPES = [
     'https://www.googleapis.com/auth/spreadsheets',
     'https://www.googleapis.com/auth/drive.file'
