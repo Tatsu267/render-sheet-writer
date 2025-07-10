@@ -2,4 +2,4 @@ Flask
 Flask-Cors
 gspread
 gunicorn
-google-auth-oauth2client
+google-auth-oauthlib
