@@ -9,9 +9,9 @@ app = Flask(__name__)
 CORS(app)
 
 # --- Google Sheetsの設定 ---
-# RenderのSecret Fileから認証情報を読み込む
-# SERVICE_ACCOUNT_FILE_PATH = 'C:\python\render-sheet-writeralien-isotope-455823-n4-6db6b2ed6b17.json'
 # ローカルテスト用に、同じフォルダにあるファイルを読み込む
+# SERVICE_ACCOUNT_FILE_PATH = 'C:\python\render-sheet-writeralien-isotope-455823-n4-6db6b2ed6b17.json'
+# RenderのSecret Fileから認証情報を読み込む
 SERVICE_ACCOUNT_FILE_PATH = '/etc/secrets/alien-isotope-455823-n4-6db6b2ed6b17.json'
 
 SPREADSHEET_ID = '1wP2JQNj2iWTxq68XBzkg_Mb7uZtCC9_6f73G89Ds4Qw'
