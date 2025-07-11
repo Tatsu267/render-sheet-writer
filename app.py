@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import gspread
-import os
+import traceback
 
 # Flaskアプリの初期化
 app = Flask(__name__)
@@ -24,7 +24,6 @@ SCOPES = [
 # --- APIのエンドポイントを作成 ---
 @app.route('/write', methods=['POST'])
 def write_to_sheet():
-    # リクエストがJSON形式かチェック
     if not request.is_json:
         return jsonify({"error": "Request must be JSON"}), 400
 
@@ -32,24 +31,22 @@ def write_to_sheet():
     timestamp = data.get('timestamp')
     employee_count = data.get('employeeCount')
 
-    # 必要なデータが揃っているかチェック
     if not timestamp or employee_count is None:
         return jsonify({"error": "Missing timestamp or employeeCount"}), 400
 
     try:
-        # 認証情報を読み込んでGoogle Sheetsに接続
         creds = gspread.service_account(filename=SERVICE_ACCOUNT_FILE_PATH, scopes=SCOPES)
         worksheet = creds.open_by_key(SPREADSHEET_ID).worksheet(SHEET_NAME)
-        
-        # シートの最終行にデータを追記
         worksheet.append_row([timestamp, employee_count])
-        
+
         print(f"書き込み成功: {timestamp}, {employee_count}")
         return jsonify({"status": "success"}), 200
 
     except Exception as e:
-        print(f"エラーが発生しました: {e}")
-        return jsonify({"error": str(e)}), 500
+        # ▼▼▼ エラー発生時に、詳細な情報をログに出力するように変更 ▼▼▼
+        error_details = traceback.format_exc()
+        print(f"エラーが発生しました:\n{error_details}")
+        return jsonify({"error": "Internal Server Error", "details": error_details}), 500
 
 # ローカルでテスト実行するための設定
 if __name__ == '__main__':
