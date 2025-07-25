@@ -17,14 +17,14 @@ SCOPES = [
     'https://www.googleapis.com/auth/drive.file'
 ]
 
-# --- ヘルパー関数：シートが存在しなければ作成 ---
+# --- ヘルパー関数：シートが存在しなければヘッダー付きで作成 ---
 def get_worksheet(spreadsheet, sheet_name):
     try:
         return spreadsheet.worksheet(sheet_name)
     except gspread.WorksheetNotFound:
         worksheet = spreadsheet.add_worksheet(title=sheet_name, rows=100, cols=20)
         if sheet_name == SHEET_NAME_WAIT_TIME:
-            worksheet.append_row(['ターミナルID', '開始時刻', '終了時刻', '終了ステータス', 'レジ待ち台数', 'レジ待ち時間（秒）'])
+            worksheet.append_row(['ターミナルID', '開始時刻', '終了時刻', '終了ステータス', 'レジ待ち台数', '総数量', 'レジ待ち時間（秒）'])
         elif sheet_name == SHEET_NAME_COUNT:
              worksheet.append_row(['更新時間', '従業員チェック台数'])
         return worksheet
@@ -59,8 +59,8 @@ def log_wait_time():
     start_time_str = data.get('startTime')
     end_time_str = data.get('endTime')
     end_status = data.get('endStatus')
-    # ★★★★★ 変更点：開始時の台数をデータから取得 ★★★★★
     start_count = data.get('startCount')
+    total_items = data.get('totalItems')
 
     if not all([terminal_id, start_time_str, end_time_str, end_status]):
         return jsonify({"error": "Missing required data"}), 400
@@ -69,22 +69,21 @@ def log_wait_time():
         time_format = '%Y/%m/%d %H:%M:%S'
         start_time = datetime.strptime(start_time_str, time_format)
         end_time = datetime.strptime(end_time_str, time_format)
-        wait_duration_seconds = (end_time - start_time).total_seconds()
+        wait_duration_seconds = round((end_time - start_time).total_seconds())
         
-        # ★★★★★ 変更点：自分自身を引いた待ち人数を計算 ★★★★★
         waiting_line_count = start_count - 1 if start_count is not None and start_count > 0 else 0
 
         creds = gspread.service_account(filename=SERVICE_ACCOUNT_FILE_PATH, scopes=SCOPES)
         spreadsheet = creds.open_by_key(SPREADSHEET_ID)
         worksheet = get_worksheet(spreadsheet, SHEET_NAME_WAIT_TIME)
         
-        # ★★★★★ 変更点：待ち人数のデータを追加して書き込み ★★★★★
         worksheet.append_row([
             terminal_id,
             start_time_str,
             end_time_str,
             end_status,
             waiting_line_count,
+            total_items,
             wait_duration_seconds
         ])
         
