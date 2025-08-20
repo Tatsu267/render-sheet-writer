@@ -1,6 +1,9 @@
+import os
+import json
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import gspread
+from google.oauth2.service_account import Credentials
 import traceback
 from datetime import datetime
 
@@ -12,87 +15,81 @@ SERVICE_ACCOUNT_FILE_PATH = '/etc/secrets/alien-isotope-455823-n4-6db6b2ed6b17.j
 SPREADSHEET_ID = '1wP2JQNj2iWTxq68XBzkg_Mb7uZtCC9_6f73G89Ds4Qw'
 SHEET_NAME_COUNT = 'レジ待ち台数'
 SHEET_NAME_WAIT_TIME = 'レジ待ち時間'
+SHEET_NAME_LOG = 'スクリプトのログ' 
 SCOPES = [
     'https://www.googleapis.com/auth/spreadsheets',
     'https://www.googleapis.com/auth/drive.file'
 ]
 
-# --- ヘルパー関数：シートが存在しなければヘッダー付きで作成 ---
-def get_worksheet(spreadsheet, sheet_name):
+# --- ヘルパー関数 ---
+def get_spreadsheet_client():
+    creds = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE_PATH, scopes=SCOPES)
+    return gspread.authorize(creds)
+
+def get_worksheet(spreadsheet, sheet_name, headers=None):
     try:
         return spreadsheet.worksheet(sheet_name)
     except gspread.WorksheetNotFound:
         worksheet = spreadsheet.add_worksheet(title=sheet_name, rows=100, cols=20)
-        if sheet_name == SHEET_NAME_WAIT_TIME:
-            worksheet.append_row(['ターミナルID', '開始時刻', '終了時刻', '終了ステータス', 'レジ待ち台数', '総数量', 'レジ待ち時間（秒）'])
-        elif sheet_name == SHEET_NAME_COUNT:
-             worksheet.append_row(['更新時間', '従業員チェック台数'])
+        if headers:
+            worksheet.append_row(headers)
         return worksheet
+
+def log_event(client, message):
+    try:
+        spreadsheet = client.open_by_key(SPREADSHEET_ID)
+        log_sheet = get_worksheet(spreadsheet, SHEET_NAME_LOG, headers=['タイムスタンプ', 'サーバー名', 'イベント'])
+        timestamp = datetime.now().strftime('%Y/%m/%d %H:%M:%S')
+        log_sheet.append_row([timestamp, 'sheet-writer', message])
+    except Exception as e:
+        print(f"ロギングエラー: {e}")
 
 # --- APIエンドポイント ---
 
-# 窓口A: 全体の台数を記録する
 @app.route('/write', methods=['POST'])
 def write_count():
-    if not request.is_json: return jsonify({"error": "Request must be JSON"}), 400
     data = request.get_json()
     timestamp = data.get('timestamp')
     employee_count = data.get('employeeCount')
-    if timestamp is None or employee_count is None: return jsonify({"error": "Missing data"}), 400
+    
     try:
-        creds = gspread.service_account(filename=SERVICE_ACCOUNT_FILE_PATH, scopes=SCOPES)
-        spreadsheet = creds.open_by_key(SPREADSHEET_ID)
-        worksheet = get_worksheet(spreadsheet, SHEET_NAME_COUNT)
+        client = get_spreadsheet_client()
+        spreadsheet = client.open_by_key(SPREADSHEET_ID)
+        worksheet = get_worksheet(spreadsheet, SHEET_NAME_COUNT, headers=['更新時間', '従業員チェック台数'])
         worksheet.append_row([timestamp, employee_count])
-        print(f"台数記録成功: {timestamp}, {employee_count}")
+        
+        log_event(client, f"台数記録成功: {employee_count}人")
         return jsonify({"status": "success"}), 200
     except Exception:
-        print(f"エラーが発生しました (write):\n{traceback.format_exc()}")
+        # エラーログも記録
+        client = get_spreadsheet_client()
+        log_event(client, f"台数記録エラー: {traceback.format_exc()}")
         return jsonify({"error": "Internal Server Error"}), 500
 
-# 窓口B: 個別の待ち時間を記録する
 @app.route('/log-wait-time', methods=['POST'])
 def log_wait_time():
-    if not request.is_json: return jsonify({"error": "Request must be JSON"}), 400
     data = request.get_json()
-    terminal_id = data.get('terminalId')
-    start_time_str = data.get('startTime')
-    end_time_str = data.get('endTime')
-    end_status = data.get('endStatus')
-    start_count = data.get('startCount')
-    total_items = data.get('totalItems')
-
-    if not all([terminal_id, start_time_str, end_time_str, end_status]):
-        return jsonify({"error": "Missing required data"}), 400
-
     try:
-        time_format = '%Y/%m/%d %H:%M:%S'
-        start_time = datetime.strptime(start_time_str, time_format)
-        end_time = datetime.strptime(end_time_str, time_format)
-        wait_duration_seconds = round((end_time - start_time).total_seconds())
+        client = get_spreadsheet_client()
+        spreadsheet = client.open_by_key(SPREADSHEET_ID)
+        worksheet = get_worksheet(spreadsheet, SHEET_NAME_WAIT_TIME, headers=['ターミナルID', '開始時刻', '終了時刻', '終了ステータス', 'レジ待ち台数', '総数量', 'レジ待ち時間（秒）'])
         
-        waiting_line_count = start_count - 1 if start_count is not None and start_count > 0 else 0
+        start_time = datetime.strptime(data['startTime'], '%Y/%m/%d %H:%M:%S')
+        end_time = datetime.strptime(data['endTime'], '%Y/%m/%d %H:%M:%S')
+        wait_duration = round((end_time - start_time).total_seconds())
+        waiting_line = int(data['startCount']) - 1 if data.get('startCount') and int(data['startCount']) > 0 else 0
 
-        creds = gspread.service_account(filename=SERVICE_ACCOUNT_FILE_PATH, scopes=SCOPES)
-        spreadsheet = creds.open_by_key(SPREADSHEET_ID)
-        worksheet = get_worksheet(spreadsheet, SHEET_NAME_WAIT_TIME)
-        
         worksheet.append_row([
-            terminal_id,
-            start_time_str,
-            end_time_str,
-            end_status,
-            waiting_line_count,
-            total_items,
-            wait_duration_seconds
+            data['terminalId'], data['startTime'], data['endTime'], data['endStatus'],
+            waiting_line, data.get('totalItems'), wait_duration
         ])
         
-        print(f"待ち時間記録成功: ターミナルID {terminal_id}, 待ち時間 {wait_duration_seconds}秒")
+        log_event(client, f"待ち時間記録成功: ターミナルID {data['terminalId']}")
         return jsonify({"status": "success"}), 200
-
     except Exception:
-        print(f"エラーが発生しました (log-wait-time):\n{traceback.format_exc()}")
+        client = get_spreadsheet_client()
+        log_event(client, f"待ち時間記録エラー: {traceback.format_exc()}")
         return jsonify({"error": "Internal Server Error"}), 500
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+    app.run(port=int(os.environ.get('PORT', 8080)))
