@@ -6,6 +6,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 import traceback
 from datetime import datetime
+import pytz
 
 app = Flask(__name__)
 CORS(app)
@@ -39,7 +40,8 @@ def log_event(client, message):
     try:
         spreadsheet = client.open_by_key(SPREADSHEET_ID)
         log_sheet = get_worksheet(spreadsheet, SHEET_NAME_LOG, headers=['タイムスタンプ', 'サーバー名', 'イベント'])
-        timestamp = datetime.now().strftime('%Y/%m/%d %H:%M:%S')
+        jst = pytz.timezone('Asia/Tokyo')
+        timestamp = datetime.now(jst).strftime('%Y/%m/%d %H:%M:%S')
         log_sheet.append_row([timestamp, 'sheet-writer', message])
     except Exception as e:
         print(f"ロギングエラー: {e}")
@@ -52,8 +54,8 @@ def write_count():
     timestamp = data.get('timestamp')
     employee_count = data.get('employeeCount')
     
+    client = get_spreadsheet_client()
     try:
-        client = get_spreadsheet_client()
         spreadsheet = client.open_by_key(SPREADSHEET_ID)
         worksheet = get_worksheet(spreadsheet, SHEET_NAME_COUNT, headers=['更新時間', '従業員チェック台数'])
         worksheet.append_row([timestamp, employee_count])
@@ -61,16 +63,14 @@ def write_count():
         log_event(client, f"台数記録成功: {employee_count}人")
         return jsonify({"status": "success"}), 200
     except Exception:
-        # エラーログも記録
-        client = get_spreadsheet_client()
         log_event(client, f"台数記録エラー: {traceback.format_exc()}")
         return jsonify({"error": "Internal Server Error"}), 500
 
 @app.route('/log-wait-time', methods=['POST'])
 def log_wait_time():
     data = request.get_json()
+    client = get_spreadsheet_client()
     try:
-        client = get_spreadsheet_client()
         spreadsheet = client.open_by_key(SPREADSHEET_ID)
         worksheet = get_worksheet(spreadsheet, SHEET_NAME_WAIT_TIME, headers=['ターミナルID', '開始時刻', '終了時刻', '終了ステータス', 'レジ待ち台数', '総数量', 'レジ待ち時間（秒）'])
         
@@ -87,7 +87,6 @@ def log_wait_time():
         log_event(client, f"待ち時間記録成功: ターミナルID {data['terminalId']}")
         return jsonify({"status": "success"}), 200
     except Exception:
-        client = get_spreadsheet_client()
         log_event(client, f"待ち時間記録エラー: {traceback.format_exc()}")
         return jsonify({"error": "Internal Server Error"}), 500
 
