@@ -12,8 +12,8 @@ app = Flask(__name__)
 CORS(app)
 
 # --- Google Sheetsの設定 ---
-SERVICE_ACCOUNT_FILE_PATH = '/etc/secrets/service_account.json'
-SPREADSHEET_ID = os.environ.get('SPREADSHEET_ID')
+SERVICE_ACCOUNT_FILE_PATH = '/etc/secrets/alien-isotope-455823-n4-6db6b2ed6b17.json'
+SPREADSHEET_ID = '1wP2JQNj2iWTxq68XBzkg_Mb7uZtCC9_6f73G89Ds4Qw'
 SHEET_NAME_COUNT = 'レジ待ち台数'
 SHEET_NAME_WAIT_TIME = 'レジ待ち時間'
 SHEET_NAME_LOG = 'スクリプトのログ' 
@@ -121,3 +121,4 @@ def log_wait_time():
 
 if __name__ == '__main__':
     app.run(port=int(os.environ.get('PORT', 8080)))
+
